@@ -1,32 +1,30 @@
-# React + TypeScript + Vite
+# KoinThePol
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Aplicacao para coletar mercados de Bitcoin up/down da Polymarket e registrar previsoes em PostgreSQL.
 
-Currently, two official plugins are available:
+## Configuracao
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Crie um banco PostgreSQL chamado `kointhepol`.
+2. Ajuste o arquivo `.env` com a sua `DATABASE_URL`.
+3. Instale as dependencias com `npm install`.
 
-## React Compiler
+Ao iniciar a API, as tabelas `market_snapshots` e `predictions` sao criadas automaticamente.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## API
 
-## Expanding the Oxlint configuration
+- `POST /api/collect/1h`: busca o mercado atual de Bitcoin up/down de 1 hora, salva o JSON bruto e retorna o snapshot.
+- `POST /api/collect/4h`: busca o mercado atual de Bitcoin up/down de 4 horas, salva o snapshot inicial e abre a assinatura WebSocket.
+- `GET /api/collect/1h/latest`: retorna o ultimo JSON de 1 hora salvo no banco.
+- `GET /api/collect/4h/latest`: retorna o ultimo JSON de 4 horas salvo no banco.
+- `GET /api/collect/4h/status`: informa se o WebSocket do mercado 4h está conectado.
+- `POST /api/update`: cria uma previsao `UP` ou `DOWN` usando o ultimo snapshot coletado.
+- `GET /api/health`: verifica a conexao com o banco.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+A coleta inicial acontece somente quando a rota correspondente e chamada. O servidor nao executa loops ou agendamentos automaticos. O mercado 4h continua recebendo atualizacoes pelo WebSocket depois que `/api/collect/4h` e chamado. A selecao usa a janela de tempo atual e ignora mercados antigos.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Comandos
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+- `npm run dev`: frontend Vite.
+- `npm run server:dev`: API e agendamentos.
+- `npm run build`: build do frontend.
+- `npm run server:build`: build do backend.

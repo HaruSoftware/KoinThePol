@@ -5,16 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "tsx server/index.ts",
+    "server:dev": "tsx server/index.ts",
     "build": "tsc -b && vite build",
+    "server:build": "tsc -p tsconfig.server.json",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tsx": "^4.20.3",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/express": "^5.0.5",
+    "@types/pg": "^8.15.5",
+    "@types/ws": "^8.18.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
