@@ -11,6 +11,7 @@ export type MarketData = {
   eventStartTime?: string
   endDate?: string
   raw: unknown
+  bitcoinReferencePrice?: number
 }
 
 type MarketResponse = {
@@ -27,10 +28,13 @@ type MarketResponse = {
   clobTokenIds?: string | string[]
   outcomes?: string | string[]
   outcomePrices?: string | number[]
+  eventMetadata?: { priceToBeat?: string | number }
+  events?: Array<{ eventMetadata?: { priceToBeat?: string | number } }>
 }
 
 type EventResponse = {
   markets?: MarketResponse[]
+  eventMetadata?: { priceToBeat?: string | number }
 }
 
 const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
@@ -79,7 +83,10 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
       const response = await fetch(`https://gamma-api.polymarket.com/events/slug/${hourlyEventSlug(timestamp)}`)
       if (!response.ok) continue
       const event = (await response.json()) as EventResponse
-      markets.push(...(event.markets ?? []))
+      markets.push(...(event.markets ?? []).map((market) => ({
+        ...market,
+        eventMetadata: market.eventMetadata ?? event.eventMetadata,
+      })))
     }
   }
 
@@ -144,5 +151,8 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
     eventStartTime: market.eventStartTime ?? market.startTime,
     endDate: market.endDate,
     raw: market,
+    bitcoinReferencePrice: Number.isFinite(Number((market.eventMetadata ?? market.events?.[0]?.eventMetadata)?.priceToBeat))
+      ? Number((market.eventMetadata ?? market.events?.[0]?.eventMetadata)?.priceToBeat)
+      : undefined,
   }
 }

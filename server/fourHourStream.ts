@@ -23,6 +23,7 @@ type ActiveStream = {
   market: MarketData
   prices: number[]
   updatedAt: string
+  bitcoinReferencePrice?: number
   assetIds?: string[]
   lastPersistedMinute?: string
 }
@@ -66,6 +67,7 @@ export function connectMarketStream(durationHours: DurationHours, market: Market
     market,
     prices,
     updatedAt: new Date().toISOString(),
+    bitcoinReferencePrice: market.bitcoinReferencePrice,
   }
   activeStreams.set(durationHours, stream)
 
@@ -117,6 +119,7 @@ export function streamStatus(durationHours: DurationHours): {
   upProbability?: number
   downProbability?: number
   updatedAt?: string
+  bitcoinReferencePrice?: number
   assetIds?: string[]
 } {
   const activeStream = activeStreams.get(durationHours)
@@ -130,6 +133,7 @@ export function streamStatus(durationHours: DurationHours): {
     upProbability: activeStream?.prices[0],
     downProbability: activeStream?.prices[1],
     updatedAt: activeStream?.updatedAt,
+    bitcoinReferencePrice: activeStream?.bitcoinReferencePrice,
     assetIds: activeStream?.market.clobTokenIds,
   }
 }

@@ -35,6 +35,7 @@ type StreamStatus = {
   upProbability?: number
   downProbability?: number
   updatedAt?: string
+  bitcoinReferencePrice?: number
   assetIds?: string[]
 }
 
@@ -51,6 +52,8 @@ const api = async <T,>(path: string, options?: RequestInit): Promise<T> => {
 
 const asNumber = (value: number | string) => Number(value)
 const formatPercent = (value: number | string) => `${(asNumber(value) * 100).toFixed(1)}%`
+const formatContractPrice = (value: number | string) => `$${asNumber(value).toFixed(2)}`
+const formatBitcoinPrice = (value?: number) => value === undefined ? '--' : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatTime = (value: string) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' }).format(new Date(value))
 
 function App() {
@@ -124,9 +127,10 @@ function App() {
           <div><p className="eyebrow">{status.connected ? 'LIVE MARKET' : 'LAST SAVED MARKET'}</p><h2>{question}</h2><p className="market-slug">{status.slug ?? snapshot?.slug ?? snapshot?.market_id}</p></div>
           <div className="market-window"><span>Ends in</span><strong className="countdown">{remaining}</strong><small>{marketStart && formatTime(marketStart)} - {marketEnd && formatTime(marketEnd)}</small></div>
         </section>
+        <section className="btc-ticker"><div><span className="ticker-label">BTC reference price</span><strong>{formatBitcoinPrice(status.bitcoinReferencePrice)}</strong></div><span className="ticker-status">Polymarket event data</span></section>
         <section className="price-grid" aria-label="Latest market prices">
-          <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatPercent(upProbability)}</strong><p className="asset-id">{status.assetIds?.[0] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
-          <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatPercent(downProbability)}</strong><p className="asset-id">{status.assetIds?.[1] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>
+          <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(upProbability)}</strong><p className="price-probability">{formatPercent(upProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[0] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
+          <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(downProbability)}</strong><p className="price-probability">{formatPercent(downProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[1] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>
         </section>
         <section className="details-row">
           <div className="detail-block"><span>{status.connected ? 'WebSocket update' : 'Last saved'}</span><strong>{liveUpdatedAt && formatTime(liveUpdatedAt)}</strong></div><div className="detail-block"><span>Snapshot</span><strong>{snapshot ? `#${snapshot.id}` : 'Not saved yet'}</strong></div><div className="detail-block"><span>Stream</span><strong className={status.connected ? 'connected-text' : ''}>{status.connected ? 'Live updates' : 'Not connected'}</strong></div>
