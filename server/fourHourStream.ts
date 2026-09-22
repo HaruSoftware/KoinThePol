@@ -15,8 +15,14 @@ type MarketEvent = {
   price_changes?: PriceChange[]
 }
 
-let activeSocket: WebSocket | undefined
-let activeMarketId: string | undefined
+type DurationHours = 1 | 4
+
+type ActiveStream = {
+  socket: WebSocket
+  marketId: string
+}
+
+const activeStreams = new Map<DurationHours, ActiveStream>()
 
 function priceFromEvent(event: MarketEvent, tokenIds: string[], prices: number[]): boolean {
   const changes = event.price_changes ?? [event]
@@ -32,24 +38,25 @@ function priceFromEvent(event: MarketEvent, tokenIds: string[], prices: number[]
   return changed
 }
 
-async function saveSnapshot(market: MarketData, prices: number[], event: unknown): Promise<void> {
+async function saveSnapshot(market: MarketData, durationHours: DurationHours, prices: number[], event: unknown): Promise<void> {
   await insertMarketSnapshot(
     market.id,
-    4,
+    market.slug,
+    durationHours,
     prices[0],
     prices[1],
     { market: market.raw, event, prices },
   )
 }
 
-export function connectFourHourStream(market: MarketData): void {
-  if (activeMarketId === market.id && activeSocket?.readyState === WebSocket.OPEN) return
-  activeSocket?.close()
+export function connectMarketStream(durationHours: DurationHours, market: MarketData): void {
+  const activeStream = activeStreams.get(durationHours)
+  if (activeStream?.marketId === market.id && activeStream.socket.readyState === WebSocket.OPEN) return
+  activeStream?.socket.close()
 
   const prices = [...market.outcomePrices]
   const socket = new WebSocket(config.polymarketWebSocketUrl)
-  activeSocket = socket
-  activeMarketId = market.id
+  activeStreams.set(durationHours, { socket, marketId: market.id })
 
   socket.on('open', () => {
     socket.send(JSON.stringify({ assets_ids: market.clobTokenIds, type: 'market' }))
@@ -61,7 +68,7 @@ export function connectFourHourStream(market: MarketData): void {
       const events = Array.isArray(parsed) ? parsed : [parsed]
       for (const event of events) {
         if (priceFromEvent(event, market.clobTokenIds, prices)) {
-          void saveSnapshot(market, prices, event).catch((error: unknown) => console.error(error))
+          void saveSnapshot(market, durationHours, prices, event).catch((error: unknown) => console.error(error))
         }
       }
     } catch (error) {
@@ -71,16 +78,20 @@ export function connectFourHourStream(market: MarketData): void {
 
   socket.on('error', (error) => console.error('Polymarket WebSocket error', error))
   socket.on('close', () => {
-    if (activeSocket === socket) {
-      activeSocket = undefined
-      activeMarketId = undefined
+    if (activeStreams.get(durationHours)?.socket === socket) {
+      activeStreams.delete(durationHours)
     }
   })
 }
 
-export function fourHourStreamStatus(): { connected: boolean; marketId?: string } {
+export function connectFourHourStream(market: MarketData): void {
+  connectMarketStream(4, market)
+}
+
+export function streamStatus(durationHours: DurationHours): { connected: boolean; marketId?: string } {
+  const activeStream = activeStreams.get(durationHours)
   return {
-    connected: activeSocket?.readyState === WebSocket.OPEN,
-    marketId: activeMarketId,
+    connected: activeStream?.socket.readyState === WebSocket.OPEN,
+    marketId: activeStream?.marketId,
   }
 }

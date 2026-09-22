@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { insertMarketSnapshot, pool } from './db.js'
-import { connectFourHourStream, fourHourStreamStatus } from './fourHourStream.js'
+import { connectMarketStream, streamStatus } from './fourHourStream.js'
 import { fetchBitcoinMarket } from './polymarket.js'
 
 export const apiRouter = Router()
@@ -13,11 +13,12 @@ apiRouter.get('/health', async (_request, response) => {
 async function collect(durationHours: 1 | 4, response: Parameters<Parameters<typeof apiRouter.post>[1]>[1], next: Parameters<Parameters<typeof apiRouter.post>[1]>[2]) {
   try {
     const market = await fetchBitcoinMarket(durationHours)
-    if (durationHours === 4) connectFourHourStream(market)
+    connectMarketStream(durationHours, market)
     const upIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
     const downIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
     const snapshot = await insertMarketSnapshot(
       market.id,
+      market.slug,
       durationHours,
       market.outcomePrices[upIndex],
       market.outcomePrices[downIndex],
@@ -35,7 +36,8 @@ async function collect(durationHours: 1 | 4, response: Parameters<Parameters<typ
 
 apiRouter.post('/collect/1h', (request, response, next) => void collect(1, response, next))
 apiRouter.post('/collect/4h', (request, response, next) => void collect(4, response, next))
-apiRouter.get('/collect/4h/status', (_request, response) => response.json(fourHourStreamStatus()))
+apiRouter.get('/collect/1h/status', (_request, response) => response.json(streamStatus(1)))
+apiRouter.get('/collect/4h/status', (_request, response) => response.json(streamStatus(4)))
 
 async function latestSnapshot(durationHours: string, response: Parameters<Parameters<typeof apiRouter.get>[1]>[1], next: Parameters<Parameters<typeof apiRouter.get>[1]>[2]) {
   if (durationHours !== '1' && durationHours !== '4') {
@@ -46,7 +48,7 @@ async function latestSnapshot(durationHours: string, response: Parameters<Parame
   try {
     const result = await pool.query(
       `SELECT id, market_id, duration_hours, up_probability, down_probability,
-              observed_at, payload
+              observed_at, slug, payload
        FROM market_snapshots
        WHERE duration_hours = $1
        ORDER BY observed_at DESC

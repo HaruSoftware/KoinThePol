@@ -9,6 +9,7 @@ export async function initializeDatabase(): Promise<void> {
     CREATE TABLE IF NOT EXISTS market_snapshots (
       id BIGSERIAL PRIMARY KEY,
       market_id TEXT NOT NULL,
+      slug TEXT,
       duration_hours INTEGER NOT NULL,
       up_probability NUMERIC(8, 6),
       down_probability NUMERIC(8, 6),
@@ -18,6 +19,13 @@ export async function initializeDatabase(): Promise<void> {
 
     ALTER TABLE market_snapshots
       ADD COLUMN IF NOT EXISTS duration_hours INTEGER;
+
+    ALTER TABLE market_snapshots
+      ADD COLUMN IF NOT EXISTS slug TEXT;
+
+    UPDATE market_snapshots
+      SET slug = COALESCE(payload->>'slug', payload->'market'->>'slug')
+      WHERE slug IS NULL AND COALESCE(payload->>'slug', payload->'market'->>'slug') IS NOT NULL;
 
     UPDATE market_snapshots
       SET duration_hours = 1
@@ -73,6 +81,7 @@ export async function initializeDatabase(): Promise<void> {
 
 export async function insertMarketSnapshot(
   marketId: string,
+  slug: string,
   durationHours: 1 | 4,
   upProbability: number,
   downProbability: number,
@@ -80,11 +89,11 @@ export async function insertMarketSnapshot(
 ): Promise<{ id: string; observed_at: string; created: boolean }> {
   const inserted = await pool.query<{ id: string; observed_at: string }>(
     `INSERT INTO market_snapshots
-      (market_id, duration_hours, up_probability, down_probability, payload, observed_at)
-     VALUES ($1, $2, $3, $4, $5, date_trunc('minute', NOW()))
+      (market_id, slug, duration_hours, up_probability, down_probability, payload, observed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, date_trunc('minute', NOW()))
      ON CONFLICT DO NOTHING
      RETURNING id, observed_at`,
-    [marketId, durationHours, upProbability, downProbability, payload],
+    [marketId, slug, durationHours, upProbability, downProbability, payload],
   )
   if (inserted.rows[0]) return { ...inserted.rows[0], created: true }
 

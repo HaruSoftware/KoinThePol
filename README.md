@@ -16,11 +16,12 @@ Ao iniciar a API, as tabelas `market_snapshots` e `predictions` sao criadas auto
 - `POST /api/collect/4h`: busca o mercado atual de Bitcoin up/down de 4 horas, salva o snapshot inicial e abre a assinatura WebSocket.
 - `GET /api/collect/1h/latest`: retorna o ultimo JSON de 1 hora salvo no banco.
 - `GET /api/collect/4h/latest`: retorna o ultimo JSON de 4 horas salvo no banco.
+- `GET /api/collect/1h/status`: informa se o WebSocket do mercado 1h está conectado.
 - `GET /api/collect/4h/status`: informa se o WebSocket do mercado 4h está conectado.
 - `POST /api/update`: cria uma previsao `UP` ou `DOWN` usando o ultimo snapshot coletado.
 - `GET /api/health`: verifica a conexao com o banco.
 
-A coleta inicial acontece somente quando a rota correspondente e chamada. O servidor nao executa loops ou agendamentos automaticos. O mercado 4h continua recebendo atualizacoes pelo WebSocket depois que `/api/collect/4h` e chamado. A selecao usa a janela de tempo atual e ignora mercados antigos.
+A coleta inicial acontece somente quando a rota correspondente e chamada. O servidor nao executa loops ou agendamentos automaticos. O mercado continua recebendo atualizacoes pelo WebSocket depois que a rota de coleta correspondente e chamada. A selecao usa a janela de tempo atual, escolhe o mercado vigente mais recentemente iniciado e ignora mercados antigos.
 
 ## Comandos
 

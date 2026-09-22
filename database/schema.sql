@@ -3,6 +3,7 @@
 CREATE TABLE IF NOT EXISTS market_snapshots (
   id BIGSERIAL PRIMARY KEY,
   market_id TEXT NOT NULL,
+  slug TEXT,
   duration_hours INTEGER NOT NULL CHECK (duration_hours IN (1, 4)),
   up_probability NUMERIC(8, 6),
   down_probability NUMERIC(8, 6),

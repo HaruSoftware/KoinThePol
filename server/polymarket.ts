@@ -2,11 +2,13 @@ import { config } from './config.js'
 
 export type MarketData = {
   id: string
+  slug: string
   question: string
   outcomes: string[]
   outcomePrices: number[]
   clobTokenIds: string[]
   startDate?: string
+  eventStartTime?: string
   endDate?: string
   raw: unknown
 }
@@ -17,12 +19,35 @@ type MarketResponse = {
   question?: string
   slug?: string
   startDate?: string
+  startTime?: string
+  eventStartTime?: string
   endDate?: string
   active?: boolean
   closed?: boolean
   clobTokenIds?: string | string[]
   outcomes?: string | string[]
   outcomePrices?: string | number[]
+}
+
+type EventResponse = {
+  markets?: MarketResponse[]
+}
+
+const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+
+function hourlyEventSlug(timestamp: number): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    hour12: true,
+  }).formatToParts(new Date(timestamp * 1000))
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  const hour = values.hour
+  const period = values.dayPeriod.toLowerCase()
+  return `bitcoin-up-or-down-${monthNames[Number(values.month) - 1]}-${values.day}-${values.year}-${hour}${period}-et`
 }
 
 function parseArray(value: string | string[] | number[] | undefined): (string | number)[] {
@@ -49,18 +74,36 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
     if (response.ok) markets.push((await response.json()) as MarketResponse)
   }
 
+  if (durationHours === 1 && markets.length === 0) {
+    for (const timestamp of candidates) {
+      const response = await fetch(`https://gamma-api.polymarket.com/events/slug/${hourlyEventSlug(timestamp)}`)
+      if (!response.ok) continue
+      const event = (await response.json()) as EventResponse
+      markets.push(...(event.markets ?? []))
+    }
+  }
+
   if (markets.length === 0) {
-    const response = await fetch(config.polymarketApiUrl)
-    if (!response.ok) throw new Error(`Polymarket returned HTTP ${response.status}`)
-    const page = (await response.json()) as MarketResponse[]
-    if (Array.isArray(page)) markets.push(...page)
+    const baseUrl = new URL(config.polymarketApiUrl)
+    baseUrl.searchParams.set('active', 'true')
+    baseUrl.searchParams.set('closed', 'false')
+    baseUrl.searchParams.set('limit', '100')
+    for (let offset = 0; offset < 1000; offset += 100) {
+      baseUrl.searchParams.set('offset', String(offset))
+      const response = await fetch(baseUrl)
+      if (!response.ok) throw new Error(`Polymarket returned HTTP ${response.status}`)
+      const page = (await response.json()) as MarketResponse[]
+      if (!Array.isArray(page) || page.length === 0) break
+      markets.push(...page)
+      if (page.length < 100) break
+    }
   }
 
   const market = markets
     .filter((item) => {
       const question = item.question?.toLowerCase() ?? ''
       const slug = item.slug?.toLowerCase() ?? ''
-      const start = Date.parse(item.startDate ?? '')
+      const start = Date.parse(item.eventStartTime ?? item.startTime ?? item.startDate ?? '')
       const end = Date.parse(item.endDate ?? '')
       return (
         item.active === true &&
@@ -68,31 +111,37 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
         question.includes('bitcoin') &&
         question.includes('up') &&
         question.includes('down') &&
-        (slug.includes(`-updown-${durationHours}h-`) || question.includes(`${durationHours} hour`)) &&
+        (slug.includes(`-updown-${durationHours}h-`) || (durationHours === 1 && slug.startsWith('bitcoin-up-or-down-')) || question.includes(`${durationHours} hour`)) &&
         Number.isFinite(start) &&
         Number.isFinite(end) &&
         start <= now &&
         now < end
       )
     })
-    .sort((first, second) => Date.parse(first.endDate ?? '') - Date.parse(second.endDate ?? ''))[0]
+    .sort((first, second) => {
+      const firstStart = Date.parse(first.eventStartTime ?? first.startTime ?? first.startDate ?? '')
+      const secondStart = Date.parse(second.eventStartTime ?? second.startTime ?? second.startDate ?? '')
+      return secondStart - firstStart
+    })[0]
   if (!market) throw new Error(`No current Bitcoin up/down ${durationHours}h market found`)
 
   const outcomes = parseArray(market.outcomes).map(String)
   const outcomePrices = parseArray(market.outcomePrices).map(Number)
   const clobTokenIds = parseArray(market.clobTokenIds).map(String)
   const marketId = market.id ?? market.conditionId
-  if (!marketId || !market.question || outcomes.length < 2 || outcomePrices.length < 2 || clobTokenIds.length < 2) {
+  if (!marketId || !market.slug || !market.question || outcomes.length < 2 || outcomePrices.length < 2 || clobTokenIds.length < 2) {
     throw new Error('Bitcoin market response has an invalid format')
   }
 
   return {
     id: marketId,
+    slug: market.slug,
     question: market.question,
     outcomes,
     outcomePrices,
     clobTokenIds,
     startDate: market.startDate,
+    eventStartTime: market.eventStartTime ?? market.startTime,
     endDate: market.endDate,
     raw: market,
   }
