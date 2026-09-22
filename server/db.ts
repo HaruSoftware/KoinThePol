@@ -87,23 +87,19 @@ export async function insertMarketSnapshot(
   downProbability: number,
   payload: unknown,
 ): Promise<{ id: string; observed_at: string; created: boolean }> {
-  const inserted = await pool.query<{ id: string; observed_at: string }>(
+  const result = await pool.query<{ id: string; observed_at: string; inserted: boolean }>(
     `INSERT INTO market_snapshots
       (market_id, slug, duration_hours, up_probability, down_probability, payload, observed_at)
      VALUES ($1, $2, $3, $4, $5, $6, date_trunc('minute', NOW()))
-     ON CONFLICT DO NOTHING
-     RETURNING id, observed_at`,
+     ON CONFLICT (market_id, duration_hours, observed_at)
+     DO UPDATE SET
+       slug = EXCLUDED.slug,
+       up_probability = EXCLUDED.up_probability,
+       down_probability = EXCLUDED.down_probability,
+       payload = EXCLUDED.payload
+     RETURNING id, observed_at, (xmax = 0) AS inserted`,
     [marketId, slug, durationHours, upProbability, downProbability, payload],
   )
-  if (inserted.rows[0]) return { ...inserted.rows[0], created: true }
-
-  const existing = await pool.query<{ id: string; observed_at: string }>(
-    `SELECT id, observed_at FROM market_snapshots
-     WHERE market_id = $1 AND duration_hours = $2
-       AND observed_at = date_trunc('minute', NOW())
-     LIMIT 1`,
-    [marketId, durationHours],
-  )
-  if (!existing.rows[0]) throw new Error('Snapshot conflict could not be resolved')
-  return { ...existing.rows[0], created: false }
+  const row = result.rows[0]
+  return { id: row.id, observed_at: row.observed_at, created: row.inserted }
 }

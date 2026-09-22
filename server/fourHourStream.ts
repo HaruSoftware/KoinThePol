@@ -20,10 +20,14 @@ type DurationHours = 1 | 4
 type ActiveStream = {
   socket: WebSocket
   marketId: string
+  market: MarketData
+  prices: number[]
+  updatedAt: string
+  assetIds?: string[]
+  lastPersistedMinute?: string
 }
 
 const activeStreams = new Map<DurationHours, ActiveStream>()
-
 function priceFromEvent(event: MarketEvent, tokenIds: string[], prices: number[]): boolean {
   const changes = event.price_changes ?? [event]
   let changed = false
@@ -56,7 +60,14 @@ export function connectMarketStream(durationHours: DurationHours, market: Market
 
   const prices = [...market.outcomePrices]
   const socket = new WebSocket(config.polymarketWebSocketUrl)
-  activeStreams.set(durationHours, { socket, marketId: market.id })
+  const stream: ActiveStream = {
+    socket,
+    marketId: market.id,
+    market,
+    prices,
+    updatedAt: new Date().toISOString(),
+  }
+  activeStreams.set(durationHours, stream)
 
   socket.on('open', () => {
     socket.send(JSON.stringify({ assets_ids: market.clobTokenIds, type: 'market' }))
@@ -68,6 +79,14 @@ export function connectMarketStream(durationHours: DurationHours, market: Market
       const events = Array.isArray(parsed) ? parsed : [parsed]
       for (const event of events) {
         if (priceFromEvent(event, market.clobTokenIds, prices)) {
+          const active = activeStreams.get(durationHours)
+          if (active?.socket === socket) {
+            active.prices = [...prices]
+            active.updatedAt = new Date().toISOString()
+            const minute = active.updatedAt.slice(0, 16)
+            if (active.lastPersistedMinute === minute) continue
+            active.lastPersistedMinute = minute
+          }
           void saveSnapshot(market, durationHours, prices, event).catch((error: unknown) => console.error(error))
         }
       }
@@ -88,10 +107,29 @@ export function connectFourHourStream(market: MarketData): void {
   connectMarketStream(4, market)
 }
 
-export function streamStatus(durationHours: DurationHours): { connected: boolean; marketId?: string } {
+export function streamStatus(durationHours: DurationHours): {
+  connected: boolean
+  marketId?: string
+  slug?: string
+  question?: string
+  eventStartTime?: string
+  endDate?: string
+  upProbability?: number
+  downProbability?: number
+  updatedAt?: string
+  assetIds?: string[]
+} {
   const activeStream = activeStreams.get(durationHours)
   return {
     connected: activeStream?.socket.readyState === WebSocket.OPEN,
     marketId: activeStream?.marketId,
+    slug: activeStream?.market.slug,
+    question: activeStream?.market.question,
+    eventStartTime: activeStream?.market.eventStartTime,
+    endDate: activeStream?.market.endDate,
+    upProbability: activeStream?.prices[0],
+    downProbability: activeStream?.prices[1],
+    updatedAt: activeStream?.updatedAt,
+    assetIds: activeStream?.market.clobTokenIds,
   }
 }

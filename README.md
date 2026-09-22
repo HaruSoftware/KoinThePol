@@ -23,6 +23,8 @@ Ao iniciar a API, as tabelas `market_snapshots` e `predictions` sao criadas auto
 
 A coleta inicial acontece somente quando a rota correspondente e chamada. O servidor nao executa loops ou agendamentos automaticos. O mercado continua recebendo atualizacoes pelo WebSocket depois que a rota de coleta correspondente e chamada. A selecao usa a janela de tempo atual, escolhe o mercado vigente mais recentemente iniciado e ignora mercados antigos.
 
+O dashboard e somente leitura: ele consulta o status do WebSocket e o ultimo snapshot, mas nunca chama as rotas `POST /api/collect/*` nem grava no banco. O processo externo de coleta deve chamar `POST /api/collect/1h` e `POST /api/collect/4h` uma vez por minuto.
+
 ## Comandos
 
 - `npm run dev`: frontend Vite.
