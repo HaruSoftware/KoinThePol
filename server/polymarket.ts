@@ -37,8 +37,6 @@ type EventResponse = {
   eventMetadata?: { priceToBeat?: string | number }
 }
 
-type ClobMidpointResponse = { mid?: string | number }
-
 const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
 
 function hourlyEventSlug(timestamp: number): string {
@@ -135,7 +133,6 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
   if (!market) throw new Error(`No current Bitcoin up/down ${durationHours}h market found`)
 
   const outcomes = parseArray(market.outcomes).map(String)
-  const gammaPrices = parseArray(market.outcomePrices).map(Number)
   const clobTokenIds = parseArray(market.clobTokenIds).map(String)
   const marketId = market.id ?? market.conditionId
   const upIndex = outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
@@ -143,9 +140,7 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
   if (!marketId || !market.slug || !market.question || upIndex < 0 || downIndex < 0 || clobTokenIds.length <= Math.max(upIndex, downIndex)) {
     throw new Error('Bitcoin market response has an invalid format')
   }
-  const outcomePrices = [...gammaPrices]
-  outcomePrices[upIndex] = await fetchClobPrice(clobTokenIds[upIndex])
-  outcomePrices[downIndex] = await fetchClobPrice(clobTokenIds[downIndex])
+  const outcomePrices = await Promise.all(clobTokenIds.map((tokenId) => fetchClobPrice(tokenId, 'BUY')))
   return {
     id: marketId,
     slug: market.slug,
@@ -163,12 +158,14 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
   }
 }
 
-export async function fetchClobPrice(tokenId: string): Promise<number> {
-  const response = await fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`)
-  if (!response.ok) throw new Error(`CLOB midpoint returned HTTP ${response.status}`)
-  const data = (await response.json()) as ClobMidpointResponse
-  const price = Number(data.mid)
-  if (!Number.isFinite(price)) throw new Error(`CLOB returned an invalid midpoint for token ${tokenId}`)
+type ClobPriceResponse = { price?: string | number }
+
+export async function fetchClobPrice(tokenId: string, side: 'BUY' | 'SELL' = 'BUY'): Promise<number> {
+  const response = await fetch(`https://clob.polymarket.com/price?token_id=${encodeURIComponent(tokenId)}&side=${side}`)
+  if (!response.ok) throw new Error(`CLOB ${side} price returned HTTP ${response.status}`)
+  const data = (await response.json()) as ClobPriceResponse
+  const price = Number(data.price)
+  if (!Number.isFinite(price)) throw new Error(`CLOB returned an invalid ${side} price for token ${tokenId}`)
   return price
 }
 

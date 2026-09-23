@@ -123,7 +123,7 @@ function App() {
       </header>
 
       <section className="intro-row">
-        <div><p className="eyebrow accent-copy">BITCOIN / UP OR DOWN</p><h1>Decision desk</h1><p className="intro-copy">The latest saved market prices, arranged for a quick read before the next move.</p></div>
+        <div><p className="eyebrow accent-copy">BITCOIN / UP OR DOWN</p><h1>Decision desk</h1><p className="intro-copy">The latest displayed prices from Polymarket, arranged for a quick read before the next move.</p></div>
         <div className="window-switcher" role="tablist" aria-label="Market duration">
           {[1, 4].map((hours) => <button className={duration === hours ? 'window-tab active' : 'window-tab'} key={hours} onClick={() => setDuration(hours as Duration)} role="tab" aria-selected={duration === hours}>{hours}h window</button>)}
         </div>
@@ -137,8 +137,8 @@ function App() {
         </section>
         <section className="btc-ticker"><div><span className="ticker-label">BTC reference price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong></div><span className="ticker-status">Chainlink market reference</span></section>
         <section className="price-grid" aria-label="Latest market prices">
-          <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(upProbability)}</strong><p className="price-probability">{formatPercent(upProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[0] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
-          <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(downProbability)}</strong><p className="price-probability">{formatPercent(downProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[1] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>
+          <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Polymarket displayed</span></div><strong className="price-value">{formatContractPrice(upProbability)}</strong><p className="price-probability">{formatPercent(upProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[0] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
+          <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Polymarket displayed</span></div><strong className="price-value">{formatContractPrice(downProbability)}</strong><p className="price-probability">{formatPercent(downProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[1] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>
         </section>
         <section className="details-row">
           <div className="detail-block"><span>{status.connected ? 'WebSocket update' : 'Last saved'}</span><strong>{liveUpdatedAt && formatTime(liveUpdatedAt)}</strong></div><div className="detail-block"><span>Snapshot</span><strong>{snapshot ? `#${snapshot.id}` : 'Not saved yet'}</strong></div><div className="detail-block"><span>Stream</span><strong className={status.connected ? 'connected-text' : ''}>{status.connected ? 'Live updates' : 'Not connected'}</strong></div>
