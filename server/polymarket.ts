@@ -37,6 +37,8 @@ type EventResponse = {
   eventMetadata?: { priceToBeat?: string | number }
 }
 
+type ClobMidpointResponse = { mid?: string | number }
+
 const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
 
 function hourlyEventSlug(timestamp: number): string {
@@ -133,13 +135,17 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
   if (!market) throw new Error(`No current Bitcoin up/down ${durationHours}h market found`)
 
   const outcomes = parseArray(market.outcomes).map(String)
-  const outcomePrices = parseArray(market.outcomePrices).map(Number)
+  const gammaPrices = parseArray(market.outcomePrices).map(Number)
   const clobTokenIds = parseArray(market.clobTokenIds).map(String)
   const marketId = market.id ?? market.conditionId
-  if (!marketId || !market.slug || !market.question || outcomes.length < 2 || outcomePrices.length < 2 || clobTokenIds.length < 2) {
+  const upIndex = outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
+  const downIndex = outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
+  if (!marketId || !market.slug || !market.question || upIndex < 0 || downIndex < 0 || clobTokenIds.length <= Math.max(upIndex, downIndex)) {
     throw new Error('Bitcoin market response has an invalid format')
   }
-
+  const outcomePrices = [...gammaPrices]
+  outcomePrices[upIndex] = await fetchClobPrice(clobTokenIds[upIndex])
+  outcomePrices[downIndex] = await fetchClobPrice(clobTokenIds[downIndex])
   return {
     id: marketId,
     slug: market.slug,
@@ -156,3 +162,13 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
       : undefined,
   }
 }
+
+export async function fetchClobPrice(tokenId: string): Promise<number> {
+  const response = await fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`)
+  if (!response.ok) throw new Error(`CLOB midpoint returned HTTP ${response.status}`)
+  const data = (await response.json()) as ClobMidpointResponse
+  const price = Number(data.mid)
+  if (!Number.isFinite(price)) throw new Error(`CLOB returned an invalid midpoint for token ${tokenId}`)
+  return price
+}
+

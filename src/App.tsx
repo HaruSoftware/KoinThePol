@@ -16,11 +16,13 @@ type Snapshot = {
     eventStartTime?: string
     startDate?: string
     endDate?: string
+    events?: Array<{ eventMetadata?: { priceToBeat?: number | string } }>
     market?: {
       question?: string
       eventStartTime?: string
       startDate?: string
       endDate?: string
+      events?: Array<{ eventMetadata?: { priceToBeat?: number | string } }>
     }
   }
 }
@@ -55,6 +57,7 @@ const formatPercent = (value: number | string) => `${(asNumber(value) * 100).toF
 const formatContractPrice = (value: number | string) => `$${asNumber(value).toFixed(2)}`
 const formatBitcoinPrice = (value?: number) => value === undefined ? '--' : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatTime = (value: string) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' }).format(new Date(value))
+const validDate = (value?: string) => value && Number.isFinite(new Date(value).getTime()) ? value : undefined
 
 function App() {
   const [duration, setDuration] = useState<Duration>(4)
@@ -64,23 +67,26 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [clock, setClock] = useState(() => Date.now())
 
-  const loadDashboard = async (selectedDuration: Duration) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const stream = await api<StreamStatus>(`/api/collect/${selectedDuration}h/status`)
-      setStatus(stream)
-      setLoading(false)
-      void api<Snapshot>(`/api/collect/${selectedDuration}h/latest`)
-        .then(setSnapshot)
-        .catch(() => undefined)
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load dashboard data')
+  useEffect(() => {
+    let active = true
+    const loadDashboard = async () => {
+      setLoading(true)
+      setError(null)
+      const [statusResult, snapshotResult] = await Promise.allSettled([
+        api<StreamStatus>(`/api/collect/${duration}h/status`),
+        api<Snapshot>(`/api/collect/${duration}h/latest`),
+      ])
+      if (!active) return
+      if (statusResult.status === 'fulfilled') setStatus(statusResult.value)
+      if (snapshotResult.status === 'fulfilled') setSnapshot(snapshotResult.value)
+      if (statusResult.status === 'rejected' && snapshotResult.status === 'rejected') {
+        setError(statusResult.reason instanceof Error ? statusResult.reason.message : 'Could not load dashboard data')
+      }
       setLoading(false)
     }
-  }
-
-  useEffect(() => { void loadDashboard(duration) }, [duration])
+    void loadDashboard()
+    return () => { active = false }
+  }, [duration])
 
   useEffect(() => {
     const refreshLiveStatus = () => {
@@ -99,8 +105,10 @@ function App() {
 
   const marketPayload = snapshot?.payload.market ?? snapshot?.payload
   const question = status.question ?? marketPayload?.question ?? 'Live market connected'
-  const marketStart = status.eventStartTime ?? marketPayload?.eventStartTime ?? marketPayload?.startDate
-  const marketEnd = status.endDate ?? marketPayload?.endDate
+  const marketStart = validDate(status.eventStartTime) ?? validDate(marketPayload?.eventStartTime) ?? validDate(marketPayload?.startDate)
+  const marketEnd = validDate(status.endDate) ?? validDate(marketPayload?.endDate)
+  const snapshotReferencePrice = Number(marketPayload?.events?.[0]?.eventMetadata?.priceToBeat)
+  const bitcoinReferencePrice = status.bitcoinReferencePrice ?? (Number.isFinite(snapshotReferencePrice) ? snapshotReferencePrice : undefined)
   const upProbability = status.upProbability ?? asNumber(snapshot?.up_probability ?? 0)
   const downProbability = status.downProbability ?? asNumber(snapshot?.down_probability ?? 0)
   const liveUpdatedAt = status.updatedAt ?? snapshot?.observed_at
@@ -127,7 +135,7 @@ function App() {
           <div><p className="eyebrow">{status.connected ? 'LIVE MARKET' : 'LAST SAVED MARKET'}</p><h2>{question}</h2><p className="market-slug">{status.slug ?? snapshot?.slug ?? snapshot?.market_id}</p></div>
           <div className="market-window"><span>Ends in</span><strong className="countdown">{remaining}</strong><small>{marketStart && formatTime(marketStart)} - {marketEnd && formatTime(marketEnd)}</small></div>
         </section>
-        <section className="btc-ticker"><div><span className="ticker-label">BTC reference price</span><strong>{formatBitcoinPrice(status.bitcoinReferencePrice)}</strong></div><span className="ticker-status">Polymarket event data</span></section>
+        <section className="btc-ticker"><div><span className="ticker-label">BTC reference price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong></div><span className="ticker-status">Chainlink market reference</span></section>
         <section className="price-grid" aria-label="Latest market prices">
           <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(upProbability)}</strong><p className="price-probability">{formatPercent(upProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[0] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
           <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Polymarket price</span></div><strong className="price-value">{formatContractPrice(downProbability)}</strong><p className="price-probability">{formatPercent(downProbability)} implied probability</p><p className="asset-id">{status.assetIds?.[1] ?? 'asset pending'}</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>

@@ -10,20 +10,25 @@ apiRouter.get('/health', async (_request, response) => {
   response.json({ status: 'ok' })
 })
 
+export async function collectMarket(durationHours: 1 | 4) {
+  const market = await fetchBitcoinMarket(durationHours)
+  connectMarketStream(durationHours, market)
+  const upIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
+  const downIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
+  const snapshot = await insertMarketSnapshot(
+    market.id,
+    market.slug,
+    durationHours,
+    market.outcomePrices[upIndex],
+    market.outcomePrices[downIndex],
+    market.raw,
+  )
+  return { market, snapshot }
+}
+
 async function collect(durationHours: 1 | 4, response: Parameters<Parameters<typeof apiRouter.post>[1]>[1], next: Parameters<Parameters<typeof apiRouter.post>[1]>[2]) {
   try {
-    const market = await fetchBitcoinMarket(durationHours)
-    connectMarketStream(durationHours, market)
-    const upIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
-    const downIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
-    const snapshot = await insertMarketSnapshot(
-      market.id,
-      market.slug,
-      durationHours,
-      market.outcomePrices[upIndex],
-      market.outcomePrices[downIndex],
-      market.raw,
-    )
+    const { market, snapshot } = await collectMarket(durationHours)
     response.status(snapshot.created ? 201 : 200).json({ ...market, snapshot })
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('No current Bitcoin')) {

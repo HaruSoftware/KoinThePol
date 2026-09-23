@@ -1,7 +1,7 @@
 import WebSocket from 'ws'
 import { config } from './config.js'
 import { insertMarketSnapshot } from './db.js'
-import type { MarketData } from './polymarket.js'
+import { fetchClobPrice, type MarketData } from './polymarket.js'
 
 type PriceChange = {
   asset_id?: string
@@ -26,6 +26,7 @@ type ActiveStream = {
   bitcoinReferencePrice?: number
   assetIds?: string[]
   lastPersistedMinute?: string
+  pricePoller?: ReturnType<typeof setInterval>
 }
 
 const activeStreams = new Map<DurationHours, ActiveStream>()
@@ -44,19 +45,41 @@ function priceFromEvent(event: MarketEvent, tokenIds: string[], prices: number[]
 }
 
 async function saveSnapshot(market: MarketData, durationHours: DurationHours, prices: number[], event: unknown): Promise<void> {
+  const upIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
+  const downIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
   await insertMarketSnapshot(
     market.id,
     market.slug,
     durationHours,
-    prices[0],
-    prices[1],
+    prices[upIndex],
+    prices[downIndex],
     { market: market.raw, event, prices },
   )
+}
+
+async function refreshClobPrices(durationHours: DurationHours, stream: ActiveStream): Promise<void> {
+  const upIndex = stream.market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
+  const downIndex = stream.market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
+  const [upPrice, downPrice] = await Promise.all([
+    fetchClobPrice(stream.market.clobTokenIds[upIndex]),
+    fetchClobPrice(stream.market.clobTokenIds[downIndex]),
+  ])
+  if (activeStreams.get(durationHours) !== stream) return
+
+  stream.prices[upIndex] = upPrice
+  stream.prices[downIndex] = downPrice
+  stream.updatedAt = new Date().toISOString()
+  const minute = stream.updatedAt.slice(0, 16)
+  if (stream.lastPersistedMinute === minute) return
+  stream.lastPersistedMinute = minute
+  void saveSnapshot(stream.market, durationHours, stream.prices, { source: 'clob-rest', prices: stream.prices })
+    .catch((error: unknown) => console.error(error))
 }
 
 export function connectMarketStream(durationHours: DurationHours, market: MarketData): void {
   const activeStream = activeStreams.get(durationHours)
   if (activeStream?.marketId === market.id && activeStream.socket.readyState === WebSocket.OPEN) return
+  if (activeStream?.pricePoller) clearInterval(activeStream.pricePoller)
   activeStream?.socket.close()
 
   const prices = [...market.outcomePrices]
@@ -70,6 +93,10 @@ export function connectMarketStream(durationHours: DurationHours, market: Market
     bitcoinReferencePrice: market.bitcoinReferencePrice,
   }
   activeStreams.set(durationHours, stream)
+  stream.pricePoller = setInterval(() => {
+    void refreshClobPrices(durationHours, stream).catch((error: unknown) => console.error('CLOB price refresh failed', error))
+  }, 2_000)
+  void refreshClobPrices(durationHours, stream).catch((error: unknown) => console.error('Initial CLOB price refresh failed', error))
 
   socket.on('open', () => {
     socket.send(JSON.stringify({ assets_ids: market.clobTokenIds, type: 'market' }))
@@ -100,7 +127,7 @@ export function connectMarketStream(durationHours: DurationHours, market: Market
   socket.on('error', (error) => console.error('Polymarket WebSocket error', error))
   socket.on('close', () => {
     if (activeStreams.get(durationHours)?.socket === socket) {
-      activeStreams.delete(durationHours)
+      stream.updatedAt = new Date().toISOString()
     }
   })
 }
@@ -130,8 +157,8 @@ export function streamStatus(durationHours: DurationHours): {
     question: activeStream?.market.question,
     eventStartTime: activeStream?.market.eventStartTime,
     endDate: activeStream?.market.endDate,
-    upProbability: activeStream?.prices[0],
-    downProbability: activeStream?.prices[1],
+    upProbability: activeStream ? activeStream.prices[activeStream.market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')] : undefined,
+    downProbability: activeStream ? activeStream.prices[activeStream.market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')] : undefined,
     updatedAt: activeStream?.updatedAt,
     bitcoinReferencePrice: activeStream?.bitcoinReferencePrice,
     assetIds: activeStream?.market.clobTokenIds,
