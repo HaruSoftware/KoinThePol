@@ -1,6 +1,5 @@
 import WebSocket from 'ws'
 import { config } from './config.js'
-import { insertMarketSnapshot } from './db.js'
 import { fetchClobPrice, type MarketData } from './polymarket.js'
 
 type DurationHours = 1 | 4
@@ -13,24 +12,10 @@ type ActiveStream = {
   updatedAt: string
   bitcoinReferencePrice?: number
   assetIds?: string[]
-  lastPersistedMinute?: string
   pricePoller?: ReturnType<typeof setInterval>
 }
 
 const activeStreams = new Map<DurationHours, ActiveStream>()
-
-async function saveSnapshot(market: MarketData, durationHours: DurationHours, prices: number[], source: string): Promise<void> {
-  const upIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'up')
-  const downIndex = market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')
-  await insertMarketSnapshot(
-    market.id,
-    market.slug,
-    durationHours,
-    prices[upIndex],
-    prices[downIndex],
-    { market: market.raw, source, prices },
-  )
-}
 
 async function refreshClobPrices(durationHours: DurationHours, stream: ActiveStream): Promise<void> {
   const prices = await Promise.all(stream.market.clobTokenIds.map((tokenId) => fetchClobPrice(tokenId, 'BUY')))
@@ -38,11 +23,6 @@ async function refreshClobPrices(durationHours: DurationHours, stream: ActiveStr
 
   stream.prices = prices
   stream.updatedAt = new Date().toISOString()
-  const minute = stream.updatedAt.slice(0, 16)
-  if (stream.lastPersistedMinute === minute) return
-  stream.lastPersistedMinute = minute
-  void saveSnapshot(stream.market, durationHours, stream.prices, 'clob-buy-price')
-    .catch((error: unknown) => console.error(error))
 }
 
 export function connectMarketStream(durationHours: DurationHours, market: MarketData): void {

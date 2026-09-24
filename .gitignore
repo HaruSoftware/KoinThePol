@@ -12,6 +12,7 @@ dist
 dist-ssr
 dist-server
 *.local
+data/forecast-cache.json
 .env
 .env.*
 !.env.example
