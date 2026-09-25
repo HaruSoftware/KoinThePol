@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { fetchBitcoinForecast, fetchBitcoinSpotPrice } from './binance.js'
 import { connectMarketStream, streamStatus } from './fourHourStream.js'
-import { fetchBitcoinMarket } from './polymarket.js'
+import { fetchBitcoinMarket, fetchBitcoinMarketResult } from './polymarket.js'
 
 export const apiRouter = Router()
 
@@ -72,6 +72,14 @@ apiRouter.get('/snapshots/:durationHours/latest', (request, response, next) =>
 )
 apiRouter.get('/collect/1h/latest', (_request, response, next) => void latestSnapshot('1', response, next))
 apiRouter.get('/collect/4h/latest', (_request, response, next) => void latestSnapshot('4', response, next))
+
+apiRouter.get('/markets/:slug/result', async (request, response, next) => {
+  try {
+    response.json(await fetchBitcoinMarketResult(request.params.slug))
+  } catch (error) {
+    next(error)
+  }
+})
 
 apiRouter.post('/update', async (_request, response, next) => {
   try {

@@ -158,6 +158,30 @@ export async function fetchBitcoinMarket(durationHours: 1 | 4): Promise<MarketDa
   }
 }
 
+export async function fetchBitcoinMarketResult(slug: string): Promise<{ resolved: boolean; direction?: 'UP' | 'DOWN' }> {
+  const response = await fetch(`https://gamma-api.polymarket.com/markets/slug/${encodeURIComponent(slug)}`)
+  if (response.status === 404) return { resolved: false }
+  if (!response.ok) throw new Error(`Polymarket returned HTTP ${response.status}`)
+
+  const market = (await response.json()) as MarketResponse
+  if (market.closed !== true) return { resolved: false }
+
+  const outcomes = parseArray(market.outcomes).map((outcome) => String(outcome).toLowerCase())
+  const prices = parseArray(market.outcomePrices).map(Number)
+  if (outcomes.length !== prices.length || prices.some((price) => !Number.isFinite(price))) {
+    return { resolved: false }
+  }
+  const winnerIndex = prices.findIndex((price) => price >= 0.99)
+  if (winnerIndex < 0 || prices.some((price, index) => index !== winnerIndex && price > 0.01)) {
+    return { resolved: false }
+  }
+
+  const winner = outcomes[winnerIndex]
+  return winner === 'up' || winner === 'down'
+    ? { resolved: true, direction: winner.toUpperCase() as 'UP' | 'DOWN' }
+    : { resolved: false }
+}
+
 type ClobPriceResponse = { price?: string | number }
 
 export async function fetchClobPrice(tokenId: string, side: 'BUY' | 'SELL' = 'BUY'): Promise<number> {
