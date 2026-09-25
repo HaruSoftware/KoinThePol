@@ -7,7 +7,7 @@ Aplicacao para estimar a direcao do Bitcoin nas proximas 1 e 4 horas usando cand
 1. Instale as dependencias com `npm install`.
 2. Opcionalmente, ajuste `BINANCE_API_URL` no arquivo `.env`.
 
-A API nao usa banco de dados. A primeira consulta de cada mercado busca os candles BTCUSDT de 5 minutos desde 00:00 UTC, calcula a probabilidade usando o preco de referencia da Polymarket e salva o resultado em `data/forecast-cache.json`. O mesmo mercado reutiliza a previsao mesmo apos reiniciar a API; um novo mercado recebe uma nova previsao.
+A API nao usa banco de dados. A primeira consulta de cada mercado busca os candles BTCUSDT de 5 minutos das ultimas 24 horas, calcula a probabilidade usando o preco de referencia da Polymarket e salva o resultado em `data/forecast-cache.json`. O mesmo mercado reutiliza a previsao mesmo apos reiniciar a API; um novo mercado recebe uma nova previsao.
 
 ## API
 

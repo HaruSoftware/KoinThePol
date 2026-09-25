@@ -45,6 +45,10 @@ async function latestSnapshot(durationHours: string, response: Parameters<Parame
     const forecast = await fetchBitcoinForecast(market)
     response.json(forecast)
   } catch (error) {
+    if (error instanceof Error && (error.message.startsWith('Not enough Binance candles') || error.message.includes('has no Bitcoin reference price'))) {
+      response.status(503).json({ error: error.message })
+      return
+    }
     next(error)
   }
 }

@@ -32,11 +32,6 @@ export type BitcoinForecast = {
 const cachedForecasts = new Map<string, BitcoinForecast>()
 const forecastRequests = new Map<string, Promise<BitcoinForecast>>()
 
-function startOfUtcDay(timestamp: number): number {
-  const date = new Date(timestamp)
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-}
-
 function probabilityForHorizon(closes: number[], currentPrice: number, referencePrice: number, hours: 1 | 4): ForecastHorizon {
   const candlesPerHorizon = hours * 12
   const returns: number[] = []
@@ -67,9 +62,11 @@ function probabilityForHorizon(closes: number[], currentPrice: number, reference
 
 async function calculateBitcoinForecast(market: MarketData): Promise<BitcoinForecast> {
   const referencePrice = market.bitcoinReferencePrice
-  if (!Number.isFinite(referencePrice)) throw new Error(`Polymarket market ${market.slug} has no Bitcoin reference price`)
+  if (referencePrice === undefined || !Number.isFinite(referencePrice)) {
+    throw new Error(`Polymarket market ${market.slug} has no Bitcoin reference price`)
+  }
   const now = Date.now()
-  const startTime = startOfUtcDay(now)
+  const startTime = now - 24 * 60 * 60 * 1000
   const url = new URL('/api/v3/klines', config.binanceApiUrl)
   url.searchParams.set('symbol', 'BTCUSDT')
   url.searchParams.set('interval', '5m')
@@ -86,7 +83,7 @@ async function calculateBitcoinForecast(market: MarketData): Promise<BitcoinFore
     .filter((candle) => candle[6] <= now)
     .map((candle) => ({ closeTime: candle[6], close: Number(candle[4]) }))
     .filter((candle) => Number.isFinite(candle.close) && candle.close > 0)
-  if (candles.length < 13) throw new Error('Not enough Binance candles since the start of the day')
+  if (candles.length < 49) throw new Error('Not enough Binance candles in the last 24 hours')
 
   const firstCandle = candles[0]
   const lastCandle = candles[candles.length - 1]

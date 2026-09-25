@@ -5,7 +5,7 @@
 KoinThePol monitors Bitcoin Up/Down prediction markets from Polymarket. The system has two independent responsibilities:
 
 - **Collector**: starts the market WebSocket and receives live market prices.
-- **Forecast**: fetches Binance BTCUSDT candles from 00:00 UTC and calculates intraday 1h/4h estimates in memory.
+- **Forecast**: fetches the last 24 hours of Binance BTCUSDT candles and calculates 1h/4h estimates in memory.
 - **Dashboard**: read-only presentation of the current stream and the latest persisted snapshot.
 
 Do not make the dashboard trigger collection or persist data.
@@ -24,7 +24,7 @@ Do not make the dashboard trigger collection or persist data.
 - Market selection must use the real event window, preferably `eventStartTime`, not the market creation `startDate`.
 - At 08:59 ET, the selected windows must be 08:00-09:00 for 1h and 08:00-12:00 for 4h.
 - A market must be active, not closed, and currently inside its event window.
-- Forecasts use completed 5-minute candle windows from the start of the current UTC day.
+- Forecasts use completed 5-minute candle windows from the last 24 hours.
 - Freeze the first valid forecast per Polymarket market and persist it in the local ignored `data/forecast-cache.json` file.
 - Polymarket `price_changes[].price` is the source of truth for the `UP` and `DOWN` contract prices.
 - Do not label contract prices as BTC spot prices or BTC/USDT prices.

@@ -79,8 +79,10 @@ function App() {
       if (!active) return
       if (statusResult.status === 'fulfilled') setStatus(statusResult.value)
       if (snapshotResult.status === 'fulfilled') setForecast(snapshotResult.value)
-      if (statusResult.status === 'rejected' && snapshotResult.status === 'rejected') {
-        setError(statusResult.reason instanceof Error ? statusResult.reason.message : 'Could not load dashboard data')
+      if (snapshotResult.status === 'rejected') {
+        setError(snapshotResult.reason instanceof Error ? snapshotResult.reason.message : 'Could not calculate forecast')
+      } else if (statusResult.status === 'rejected') {
+        setError(statusResult.reason instanceof Error ? statusResult.reason.message : 'Could not load market status')
       }
       setLoading(false)
     }
@@ -108,8 +110,7 @@ function App() {
   const marketEnd = validDate(status.endDate) ?? validDate(forecast?.endDate)
   const horizon = forecast?.horizons[String(duration) as '1' | '4']
   const bitcoinReferencePrice = forecast?.currentPrice
-  const upProbability = horizon?.upProbability ?? 0
-  const downProbability = horizon?.downProbability ?? 0
+  const referencePrice = forecast?.referencePrice ?? status.bitcoinReferencePrice
   const liveUpdatedAt = forecast?.generatedAt
   const secondsLeft = marketEnd ? Math.max(0, Math.floor((new Date(marketEnd).getTime() - clock) / 1000)) : 0
   const remaining = `${Math.floor(secondsLeft / 3600).toString().padStart(2, '0')}:${Math.floor((secondsLeft % 3600) / 60).toString().padStart(2, '0')}:${(secondsLeft % 60).toString().padStart(2, '0')}`
@@ -131,17 +132,19 @@ function App() {
         {error && <div className="notice error-notice"><strong>Could not calculate forecast.</strong> {error}</div>}
           {loading ? <section className="loading-panel">Loading today&apos;s Binance candles<span>...</span></section> : (forecast || status.connected) ? <>
         <section className="market-banner">
-          <div><p className="eyebrow">POLYMARKET MARKET</p><h2>{question}</h2><p className="market-slug">{forecast?.marketSlug ?? status.slug} · reference ${forecast?.referencePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
+          <div><p className="eyebrow">POLYMARKET MARKET</p><h2>{question}</h2><p className="market-slug">{forecast?.marketSlug ?? status.slug} · reference {referencePrice === undefined ? '--' : `$${referencePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p></div>
           <div className="market-window"><span>Ends in</span><strong className="countdown">{remaining}</strong><small>{marketStart && formatTime(marketStart)} - {marketEnd && formatTime(marketEnd)}</small></div>
         </section>
-        <section className="btc-ticker"><div><span className="ticker-label">BTC/USDT current price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong></div><div><span className="ticker-label">Polymarket reference</span><strong>{formatBitcoinPrice(forecast?.referencePrice)}</strong></div><span className="ticker-status">Binance input / market target</span></section>
-        <section className="price-grid" aria-label="Latest market prices">
-          <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(upProbability)}</strong><p className="price-probability">Historical positive outcomes</p><p className="asset-id">{horizon?.sampleCount ?? 0} completed windows</p><div className="price-bar"><span style={{ width: `${upProbability * 100}%` }} /></div></article>
-          <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(downProbability)}</strong><p className="price-probability">Historical non-positive outcomes</p><p className="asset-id">{forecast?.candleCount ?? 0} candles analyzed</p><div className="price-bar"><span style={{ width: `${downProbability * 100}%` }} /></div></article>
-        </section>
-        <section className="details-row">
-          <div className="detail-block"><span>Forecast fixed at</span><strong>{liveUpdatedAt && formatTime(liveUpdatedAt)}</strong></div><div className="detail-block"><span>Data window</span><strong>{forecast?.dataStart && formatTime(forecast.dataStart)} - {forecast?.dataEnd && formatTime(forecast.dataEnd)}</strong></div><div className="detail-block"><span>Market</span><strong className="connected-text">{forecast?.marketId ?? status.marketId}</strong></div>
-        </section>
+        {forecast ? <>
+          <section className="btc-ticker"><div><span className="ticker-label">BTC/USDT current price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong></div><div><span className="ticker-label">Polymarket reference</span><strong>{formatBitcoinPrice(referencePrice)}</strong></div><span className="ticker-status">Binance input / market target</span></section>
+          <section className="price-grid" aria-label="Latest market prices">
+            <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(horizon?.upProbability ?? 0)}</strong><p className="price-probability">Historical positive outcomes</p><p className="asset-id">{horizon?.sampleCount ?? 0} completed windows</p><div className="price-bar"><span style={{ width: `${(horizon?.upProbability ?? 0) * 100}%` }} /></div></article>
+            <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(horizon?.downProbability ?? 0)}</strong><p className="price-probability">Historical non-positive outcomes</p><p className="asset-id">{forecast.candleCount} candles analyzed</p><div className="price-bar"><span style={{ width: `${(horizon?.downProbability ?? 0) * 100}%` }} /></div></article>
+          </section>
+          <section className="details-row">
+            <div className="detail-block"><span>Forecast fixed at</span><strong>{liveUpdatedAt && formatTime(liveUpdatedAt)}</strong></div><div className="detail-block"><span>Data window</span><strong>{forecast.dataStart && formatTime(forecast.dataStart)} - {forecast.dataEnd && formatTime(forecast.dataEnd)}</strong></div><div className="detail-block"><span>Market</span><strong className="connected-text">{forecast.marketId}</strong></div>
+          </section>
+        </> : <section className="empty-panel"><h2>Forecast unavailable</h2><p>{error ?? 'Waiting for enough Binance candles to calculate the forecast.'}</p></section>}
       </> : <section className="empty-panel"><h2>No {duration}h market connected</h2><p>The collector has not started this stream yet. The dashboard only displays collector data.</p></section>}
       <footer className="footer-note"><span>Dashboard mode</span><strong>Read only</strong><span>Daily forecast fixed after first calculation; nothing is persisted.</span></footer>
     </main>
