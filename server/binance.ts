@@ -29,8 +29,32 @@ export type BitcoinForecast = {
   horizons: Record<'1' | '4', ForecastHorizon>
 }
 
+type BinanceTicker = { price?: string | number }
+
+let cachedSpotPrice: { value: number; expiresAt: number } | undefined
+let spotPriceRequest: Promise<number> | undefined
+
 const cachedForecasts = new Map<string, BitcoinForecast>()
 const forecastRequests = new Map<string, Promise<BitcoinForecast>>()
+
+export async function fetchBitcoinSpotPrice(): Promise<number> {
+  if (cachedSpotPrice && cachedSpotPrice.expiresAt > Date.now()) return cachedSpotPrice.value
+  if (spotPriceRequest) return spotPriceRequest
+
+  spotPriceRequest = (async () => {
+    const url = new URL('/api/v3/ticker/price', config.binanceApiUrl)
+    url.searchParams.set('symbol', 'BTCUSDT')
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Binance ticker returned HTTP ${response.status}`)
+    const payload = (await response.json()) as BinanceTicker
+    const price = Number(payload.price)
+    if (!Number.isFinite(price) || price <= 0) throw new Error('Binance ticker returned an invalid price')
+    cachedSpotPrice = { value: price, expiresAt: Date.now() + 1_500 }
+    return price
+  })().finally(() => { spotPriceRequest = undefined })
+
+  return spotPriceRequest
+}
 
 function probabilityForHorizon(closes: number[], currentPrice: number, referencePrice: number, hours: 1 | 4): ForecastHorizon {
   const candlesPerHorizon = hours * 12

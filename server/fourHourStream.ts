@@ -11,6 +11,8 @@ type ActiveStream = {
   prices: number[]
   updatedAt: string
   bitcoinReferencePrice?: number
+  currentPrice?: number
+  priceChange?: number
   assetIds?: string[]
   pricePoller?: ReturnType<typeof setInterval>
 }
@@ -74,6 +76,8 @@ export function streamStatus(durationHours: DurationHours): {
   downProbability?: number
   updatedAt?: string
   bitcoinReferencePrice?: number
+  currentPrice?: number
+  priceChange?: number
   assetIds?: string[]
 } {
   const activeStream = activeStreams.get(durationHours)
@@ -88,6 +92,8 @@ export function streamStatus(durationHours: DurationHours): {
     downProbability: activeStream ? activeStream.prices[activeStream.market.outcomes.findIndex((outcome) => outcome.toLowerCase() === 'down')] : undefined,
     updatedAt: activeStream?.updatedAt,
     bitcoinReferencePrice: activeStream?.bitcoinReferencePrice,
+    currentPrice: activeStream?.currentPrice,
+    priceChange: activeStream?.priceChange,
     assetIds: activeStream?.market.clobTokenIds,
   }
 }

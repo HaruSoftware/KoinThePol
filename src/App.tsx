@@ -39,6 +39,8 @@ type StreamStatus = {
   downProbability?: number
   updatedAt?: string
   bitcoinReferencePrice?: number
+  currentPrice?: number
+  priceChange?: number
   assetIds?: string[]
 }
 
@@ -56,6 +58,8 @@ const api = async <T,>(path: string, options?: RequestInit): Promise<T> => {
 const asNumber = (value: number | string) => Number(value)
 const formatPercent = (value: number | string) => `${(asNumber(value) * 100).toFixed(1)}%`
 const formatBitcoinPrice = (value?: number) => value === undefined ? '--' : `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatPriceChange = (value?: number) => value === undefined ? '--' : `${value >= 0 ? '+' : '-'}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatPercentChange = (value?: number, reference?: number) => value === undefined || reference === undefined || reference === 0 ? '--' : `${value >= 0 ? '+' : ''}${((value / reference) * 100).toFixed(2)}%`
 const formatTime = (value: string) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' }).format(new Date(value))
 const validDate = (value?: string) => value && Number.isFinite(new Date(value).getTime()) ? value : undefined
 
@@ -109,8 +113,9 @@ function App() {
   const marketStart = validDate(status.eventStartTime) ?? validDate(forecast?.eventStartTime)
   const marketEnd = validDate(status.endDate) ?? validDate(forecast?.endDate)
   const horizon = forecast?.horizons[String(duration) as '1' | '4']
-  const bitcoinReferencePrice = forecast?.currentPrice
+  const bitcoinReferencePrice = status.currentPrice ?? forecast?.currentPrice
   const referencePrice = forecast?.referencePrice ?? status.bitcoinReferencePrice
+  const priceChange = status.priceChange ?? (bitcoinReferencePrice !== undefined && referencePrice !== undefined ? bitcoinReferencePrice - referencePrice : undefined)
   const liveUpdatedAt = forecast?.generatedAt
   const secondsLeft = marketEnd ? Math.max(0, Math.floor((new Date(marketEnd).getTime() - clock) / 1000)) : 0
   const remaining = `${Math.floor(secondsLeft / 3600).toString().padStart(2, '0')}:${Math.floor((secondsLeft % 3600) / 60).toString().padStart(2, '0')}:${(secondsLeft % 60).toString().padStart(2, '0')}`
@@ -132,11 +137,11 @@ function App() {
         {error && <div className="notice error-notice"><strong>Could not calculate forecast.</strong> {error}</div>}
           {loading ? <section className="loading-panel">Loading today&apos;s Binance candles<span>...</span></section> : (forecast || status.connected) ? <>
         <section className="market-banner">
-          <div><p className="eyebrow">POLYMARKET MARKET</p><h2>{question}</h2><p className="market-slug">{forecast?.marketSlug ?? status.slug} · reference {referencePrice === undefined ? '--' : `$${referencePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</p></div>
+          <div><p className="eyebrow">POLYMARKET MARKET</p><h2>{question}</h2><p className="market-slug">{forecast?.marketSlug ?? status.slug} · reference {referencePrice === undefined ? '--' : `$${referencePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} {status.slug && <a href={`https://polymarket.com/event/${status.slug}`} target="_blank" rel="noreferrer">Open market ↗</a>}</p></div>
           <div className="market-window"><span>Ends in</span><strong className="countdown">{remaining}</strong><small>{marketStart && formatTime(marketStart)} - {marketEnd && formatTime(marketEnd)}</small></div>
         </section>
         {forecast ? <>
-          <section className="btc-ticker"><div><span className="ticker-label">BTC/USDT current price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong></div><div><span className="ticker-label">Polymarket reference</span><strong>{formatBitcoinPrice(referencePrice)}</strong></div><span className="ticker-status">Binance input / market target</span></section>
+          <section className="btc-ticker"><div className="btc-live-value"><span className="ticker-label">BTC/USDT live price</span><strong>{formatBitcoinPrice(bitcoinReferencePrice)}</strong><span className={priceChange === undefined ? 'price-change' : priceChange >= 0 ? 'price-change positive-change' : 'price-change negative-change'}>{formatPriceChange(priceChange)} <small>{formatPercentChange(priceChange, referencePrice)}</small></span></div><span className="ticker-status">Binance spot</span></section>
           <section className="price-grid" aria-label="Latest market prices">
             <article className="price-card up-card"><div className="card-topline"><span className="direction-dot up-dot" /> UP <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(horizon?.upProbability ?? 0)}</strong><p className="price-probability">Historical positive outcomes</p><p className="asset-id">{horizon?.sampleCount ?? 0} completed windows</p><div className="price-bar"><span style={{ width: `${(horizon?.upProbability ?? 0) * 100}%` }} /></div></article>
             <article className="price-card down-card"><div className="card-topline"><span className="direction-dot down-dot" /> DOWN <span className="contract-label">Model estimate</span></div><strong className="price-value">{formatPercent(horizon?.downProbability ?? 0)}</strong><p className="price-probability">Historical non-positive outcomes</p><p className="asset-id">{forecast.candleCount} candles analyzed</p><div className="price-bar"><span style={{ width: `${(horizon?.downProbability ?? 0) * 100}%` }} /></div></article>

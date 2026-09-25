@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { fetchBitcoinForecast } from './binance.js'
+import { fetchBitcoinForecast, fetchBitcoinSpotPrice } from './binance.js'
 import { connectMarketStream, streamStatus } from './fourHourStream.js'
 import { fetchBitcoinMarket } from './polymarket.js'
 
@@ -30,8 +30,22 @@ async function collect(durationHours: 1 | 4, response: Parameters<Parameters<typ
 
 apiRouter.post('/collect/1h', (request, response, next) => void collect(1, response, next))
 apiRouter.post('/collect/4h', (request, response, next) => void collect(4, response, next))
-apiRouter.get('/collect/1h/status', (_request, response) => response.json(streamStatus(1)))
-apiRouter.get('/collect/4h/status', (_request, response) => response.json(streamStatus(4)))
+async function status(durationHours: 1 | 4, response: Parameters<Parameters<typeof apiRouter.get>[1]>[1]) {
+  const liveStatus = streamStatus(durationHours)
+  try {
+    const currentPrice = await fetchBitcoinSpotPrice()
+    response.json({
+      ...liveStatus,
+      currentPrice,
+      priceChange: liveStatus.bitcoinReferencePrice === undefined ? undefined : currentPrice - liveStatus.bitcoinReferencePrice,
+    })
+  } catch {
+    response.json(liveStatus)
+  }
+}
+
+apiRouter.get('/collect/1h/status', (_request, response) => void status(1, response))
+apiRouter.get('/collect/4h/status', (_request, response) => void status(4, response))
 
 async function latestSnapshot(durationHours: string, response: Parameters<Parameters<typeof apiRouter.get>[1]>[1], next: Parameters<Parameters<typeof apiRouter.get>[1]>[2]) {
   if (durationHours !== '1' && durationHours !== '4') {
